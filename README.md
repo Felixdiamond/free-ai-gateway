@@ -1,129 +1,147 @@
-# Free Unlimited GPT-4o mini API
+# Free AI Gateway
 
 ## Overview
 
-Why pay for GPT-3.5 API when you can just self host a GPT-4o-mini?
+Why pay for AI APIs when you can self-host free access?
 
-This is a FastAPI-based web service that provides a RESTful API interface to interact with GPT-4o-mini through browser automation. It enables programmatic access to GPT-4o-mini's capabilities without requiring an API key or paid subscription.
+This project provides a unified RESTful API interface to interact with multiple AI providers (ChatGPT, Gemini, Grok) through browser automation. It enables programmatic access without requiring API keys or paid subscriptions.
 
-Web automation done with [nodriver](https://github.com/ultrafunkamsterdam/nodriver)
+Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-generation async browser automation.
 
-## API Documentation
+## Features
 
-### Endpoints
+-   **Multiple Providers**: Support for ChatGPT (GPT-4o-mini), Google Gemini, and Grok.
+-   **Unified API**: OpenAI-compatible `chat/completions` endpoint.
+-   **Browser Automation**: Uses `nodriver` for stealthy and efficient automation.
+-   **Docker Ready**: Easy deployment with Docker Compose.
 
-#### POST /v1/chat/completions  
-Creates a chat completion request.
+## Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd free-ai-gateway
+    ```
+
+2.  **Install dependencies:**
+    Using `uv` (recommended):
+    ```bash
+    uv pip install -r requirements.txt
+    ```
+    Or standard pip:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    *Note: Requires Python 3.10+*
+
+## Docker Deployment
+
+1.  **Build and run with Docker Compose:**
+    ```bash
+    docker-compose up -d --build
+    ```
+
+2.  The API will be available at `http://localhost:8000`.
+
+3.  **Configuration:**
+    Ensure you have a `.env` file created (copy from `.env.example`) before running the container.
+
+## Configuration
+
+1.  Copy the example environment file:
+    ```bash
+    cp .env.example .env
+    ```
+2.  Edit `.env` to configure your settings (e.g., browser path, headless mode).
+
+## Usage
+
+Start the server:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+The API will be available at `http://localhost:8000`.
+
+## API Endpoints
+
+### POST /v1/chat/completions
+
+Compatible with OpenAI's chat completion format.
 
 **Request Body:**
+
 ```json
 {
-    "prompt": "Your prompt here",
-    "system_prompt": "Optional system prompt",
+    "prompt": "Explain quantum computing",
+    "system_prompt": "You are a helpful physics teacher",
+    "provider": "chatgpt", 
     "timeout": 300,
-    "stream": false, // not yet available
     "new_chat": false
 }
 ```
 
 **Parameters:**
-- `prompt` (required): The main prompt text
-- `system_prompt` (optional): System-level instructions
-- `timeout` (optional): Maximum wait time in seconds (30-600)
-- `stream` (optional): Whether to stream responses (not yet available)
-- `new_chat` (optional): Force start a new chat
+
+-   `prompt` (required): The main prompt text.
+-   `system_prompt` (optional): System-level instructions.
+-   `provider` (optional): The AI provider to use. Options: `"chatgpt"` (default), `"gemini"`, `"grok"`.
+-   `timeout` (optional): Maximum wait time in seconds (30-600).
+-   `new_chat` (optional): Force start a new chat session.
 
 **Response:**
+
 ```json
 {
-    "id": "chatcmpl-123",
+    "id": "chatcmpl-uuid",
     "object": "chat.completion",
-    "created": 1677610602,
+    "created": 1700000000,
     "model": "chatgpt-free",
     "choices": [
         {
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": "Response content here"
+                "content": "Quantum computing is..."
             },
             "finish_reason": "stop"
         }
     ],
     "usage": {
-        "prompt_tokens": 10,
-        "completion_tokens": 20,
-        "total_tokens": 30
+        "prompt_tokens": 25,
+        "completion_tokens": 100,
+        "total_tokens": 125
     }
 }
-```
 
-#### GET /health
-Returns service health status.
+### GET /v1/models
 
-**Response:**
-```json
-{
-    "status": "idk what to put here",
-    "last_reset": 1677610602,
-    "request_count": 5,
-    "last_error": null,
-    "error_count": 0
-}
-```
+List available models.
 
-Btw the usage and tokens don't mean anything, i'm just trying out an idea :)
+### POST /v1/providers/{provider_name}/reset
 
+Reset a specific provider's browser session if it gets stuck.
 
-## Setup
-
-### Prerequisites
-
-- Python 3.7 or later
-- pip (Python package manager)
-- A modern web browser
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/Felixdiamond/free-unlimited-gpt4o-mini.git
-cd free-unlimited-gpt4o-mini
+curl -X POST http://localhost:8000/v1/providers/chatgpt/reset
 ```
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+## Troubleshooting
 
-### Running the Server
+-   **Browser Issues**: If the browser gets stuck or behaves unexpectedly, use the `/reset` endpoint or restart the server.
+-   **Headless Mode**: By default, the browser runs in headless mode. Set `HEADLESS=false` in `.env` to see the browser window for debugging.
 
-1. Start the FastAPI server:
-```bash
-python server.py
-```
+## Architecture
 
-The server will start at `http://localhost:8000`.
+The project is structured as follows:
 
-### Running through Terminal
+-   `app/main.py`: FastAPI application entry point.
+-   `app/core/browser.py`: Manages the `nodriver` browser instance.
+-   `app/providers/`: Contains provider-specific logic (ChatGPT, Gemini, Grok).
+-   `app/models.py`: Pydantic models for API requests and responses.
 
-For direct terminal interaction:
-```bash
-python main.py
-```
+## Disclaimer
 
-## Limitations
-
-- Doesn't work on headless mode currently
-- Response times may vary
-- Browser automation dependent
-
-but hey, we have somewhat unlimited context now!
-
-## Contributing
-
-You can contribute if you see any meaning in this ¯_(ツ)_/¯
-
-## License
-
-This project is licensed under the terms of the LICENSE file included in the repository.
+This project is for educational purposes only. Automating third-party services may violate their Terms of Service. Use responsibly.
