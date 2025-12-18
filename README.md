@@ -60,7 +60,7 @@ Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-g
 Start the server:
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app
 ```
 
 The API will be available at `http://localhost:8000`.
