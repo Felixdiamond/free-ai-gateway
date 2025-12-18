@@ -19,7 +19,7 @@ Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-g
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/Felixdiamond/free-ai-gateway
     cd free-ai-gateway
     ```
 
