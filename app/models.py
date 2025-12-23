@@ -1,5 +1,19 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Union
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatCompletionRequest(BaseModel):
+    model: str
+    messages: List[ChatMessage]
+    stream: bool = False
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = 1.0
+    
+    # Custom extensions for our backend
+    new_chat: Optional[bool] = False
 
 class PromptRequest(BaseModel):
     prompt: str

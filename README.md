@@ -10,7 +10,7 @@ Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-g
 
 ## Features
 
--   **Multiple Providers**: Support for ChatGPT (GPT-4o-mini), Google Gemini, and Grok.
+-   **Multiple Providers**: Support for ChatGPT, Google Gemini, and Grok.
 -   **Unified API**: OpenAI-compatible `chat/completions` endpoint.
 -   **Browser Automation**: Uses `nodriver` for stealthy and efficient automation.
 -   **Docker Ready**: Easy deployment with Docker Compose.
@@ -60,7 +60,7 @@ Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-g
 Start the server:
 
 ```bash
-uvicorn app.main:app
+uvicorn app.main:app`
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -69,27 +69,34 @@ The API will be available at `http://localhost:8000`.
 
 ### POST /v1/chat/completions
 
-Compatible with OpenAI's chat completion format.
+Fully compatible with OpenAI's chat completion format.
 
 **Request Body:**
 
 ```json
 {
-    "prompt": "Explain quantum computing",
-    "system_prompt": "You are a helpful physics teacher",
-    "provider": "chatgpt", 
-    "timeout": 300,
-    "new_chat": false
+    "model": "gpt-5-mini",
+    "messages": [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain quantum computing"}
+    ],
+    "stream": false
 }
 ```
 
+**Supported Models:**
+
+The API uses keyword matching to route requests to the correct provider. You can use any model name containing these keywords:
+
+-   **ChatGPT**: Any model name with `gpt` (e.g., `gpt-5-mini`, `gpt-4o`, `chatgpt-free`)
+-   **Gemini**: Any model name with `gemini` (e.g., `gemini-3-flash`, `gemini-pro`)
+-   **Grok**: Any model name with `grok` (e.g., `grok-3-mini`, `grok-beta`)
+
 **Parameters:**
 
--   `prompt` (required): The main prompt text.
--   `system_prompt` (optional): System-level instructions.
--   `provider` (optional): The AI provider to use. Options: `"chatgpt"` (default), `"gemini"`, `"grok"`.
--   `timeout` (optional): Maximum wait time in seconds (30-600).
--   `new_chat` (optional): Force start a new chat session.
+-   `model` (required): The ID of the model to use.
+-   `messages` (required): A list of messages comprising the conversation so far.
+-   `new_chat` (optional, custom): Set to `true` to force a fresh browser session.
 
 **Response:**
 
@@ -115,6 +122,7 @@ Compatible with OpenAI's chat completion format.
         "total_tokens": 125
     }
 }
+```
 
 ### GET /v1/models
 
