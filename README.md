@@ -148,7 +148,6 @@ curl -X POST http://localhost:8000/v1/providers/chatgpt/reset
 ## Troubleshooting
 
 -   **Browser Issues**: If the browser gets stuck or behaves unexpectedly, use the `/reset` endpoint or restart the server.
--   **Headless Mode**: By default, the browser runs in headless mode. Set `HEADLESS=false` in `.env` to see the browser window for debugging.
 
 ## Architecture
 
