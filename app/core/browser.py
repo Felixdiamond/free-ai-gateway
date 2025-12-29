@@ -1,7 +1,19 @@
 import asyncio
 import logging
-import nodriver as uc
+import zendriver as zd
 from app.core.config import settings
+
+# Monkeypatch for missing CDP event in zendriver
+try:
+    from zendriver.cdp import util as cdp_util
+    if "DOM.affectedByStartingStylesFlagUpdated" not in cdp_util._event_parsers:
+        class DummyEvent:
+            @classmethod
+            def from_json(cls, _):
+                return cls()
+        cdp_util._event_parsers["DOM.affectedByStartingStylesFlagUpdated"] = DummyEvent
+except (ImportError, AttributeError):
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -25,26 +37,28 @@ class BrowserManager:
                 "headless": settings.HEADLESS,
                 "browser_args": settings.BROWSER_ARGS,
                 "user_data_dir": settings.USER_DATA_DIR,
+                "sandbox": False,
             }
             if settings.BROWSER_PATH:
                 start_kwargs["browser_executable_path"] = settings.BROWSER_PATH
 
-            cls._browser = await uc.start(**start_kwargs)
+            cls._browser = await zd.start(**start_kwargs)
             logger.info("Browser initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize browser: {e}")
             raise
 
     @classmethod
+    async def get_new_tab(cls, url: str):
+        browser = await cls.get_browser()
+        tab = await browser.get(url, new_tab=True)
+        return tab
+
+    @classmethod
     async def close(cls):
         if cls._browser:
             try:
-                cls._browser.stop()
+                await cls._browser.stop()
             except Exception as e:
                 logger.error(f"Error closing browser: {e}")
             cls._browser = None
-
-    @classmethod
-    async def get_new_tab(cls, url: str):
-        browser = await cls.get_browser()
-        return await browser.get(url, new_tab=True)

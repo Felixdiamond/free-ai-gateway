@@ -18,72 +18,76 @@ class GrokProvider(BaseProvider):
         if not self.tab:
             self.tab = await BrowserManager.get_new_tab(self.url)
             await asyncio.sleep(2)
+            try:
+                await self.tab.select("textarea", timeout=15)
+            except Exception:
+                pass
 
-    async def detect_response_completion(self):
+    async def detect_response_completion(self, min_message_count: int = 0):
         try:
-            # Wait for the copy button which indicates completion
+            if min_message_count > 0:
+                start_time = time.time()
+                while time.time() - start_time < 10:
+                    elements = await self.tab.select_all(".response-content-markdown")
+                    if len(elements) >= min_message_count:
+                        break
+                    await asyncio.sleep(0.5)
+
             await self.tab.wait_for(selector='button[aria-label="Copy"]', timeout=120)
-            
-            stable_count = 0
-            last_text = ""
-            check_start_time = time.time()
-            
-            while stable_count < 3:
-                if time.time() - check_start_time > 30:
-                    break
-
-                # Selector based on the user provided HTML
-                response_divs = await self.tab.select_all(".response-content-markdown")
-                if not response_divs:
-                    await asyncio.sleep(1)
-                    continue
-                
-                # Use text_all to get full content including children
-                current_text = response_divs[-1].text_all
-
-                if not current_text:
-                    await asyncio.sleep(1)
-                    continue
-                
-                stripped_text = current_text.strip()
-                
-                if current_text == last_text and stripped_text:
-                    stable_count += 1
-                else:
-                    stable_count = 0
-                    last_text = current_text
-                
-                await asyncio.sleep(0.5)
-
-            return last_text
+            return await self.wait_for_stable_content(".response-content-markdown")
         except Exception as e:
             logger.error(f"Error detecting Grok response: {e}")
             return ""
 
     async def send_prompt(self, request: PromptRequest) -> str:
-        await self.ensure_active()
-        
-        if request.new_chat:
-            await self.tab.reload()
-            await asyncio.sleep(2)
+        for attempt in range(2):
+            try:
+                await self.ensure_active()
+                
+                if request.new_chat:
+                    await self.tab.reload()
+                    await asyncio.sleep(2)
 
-        # Grok selectors
-        input_box = await self.tab.select("textarea", timeout=10)
-        if not input_box:
-            input_box = await self.tab.find("Ask Grok", best_match=True)
+                try:
+                    existing_messages = await self.tab.select_all(".response-content-markdown", timeout=1)
+                    target_message_count = len(existing_messages) + 1
+                except Exception:
+                    target_message_count = 1
 
-        if not input_box:
-            raise ProviderError("Could not find Grok input box")
+                # Try to find the input box with various selectors, prioritizing the rich text editor
+                input_box = await self.tab.select("textarea", timeout=3)
+                
+                if not input_box:
+                    input_box = await self.tab.select("div.ProseMirror", timeout=3)
+                
+                if not input_box:
+                    input_box = await self.tab.select("div[contenteditable='true']", timeout=3)
+                
+                if not input_box:
+                    input_box = await self.tab.find("What do you want to know?", best_match=True)
+                
+                if not input_box:
+                    input_box = await self.tab.find("How can Grok help?", best_match=True)
 
-        await input_box.click()
-        await input_box.send_keys(request.prompt)
-        
-        # Send using the specific submit button selector
-        try:
-            submit_button = await self.tab.select('button[aria-label="Submit"]', timeout=5)
-            await submit_button.click()
-        except Exception:
-            # Fallback to Enter key if button not found
-            await input_box.send_keys("\n")
-        
-        return await self.detect_response_completion()
+                if not input_box:
+                    raise ProviderError("Could not find Grok input box")
+
+                await input_box.click()
+                await asyncio.sleep(0.2)
+                await input_box.send_keys(self.format_prompt(request.prompt, request.system_prompt))
+                
+                try:
+                    submit_button = await self.tab.select('button[aria-label="Submit"]', timeout=5)
+                    async with self.tab.expect_response(".*completion.*"):
+                        await submit_button.click()
+                except Exception:
+                    await input_box.send_keys("\n")
+                
+                return await self.detect_response_completion(target_message_count)
+            except Exception as e:
+                if self._is_transient_ws_error(e) and attempt == 0:
+                    await self.reset()
+                    await asyncio.sleep(0.2)
+                    continue
+                raise
+        raise ProviderError("Transient browser error. Please retry.")

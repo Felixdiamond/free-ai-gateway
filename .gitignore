@@ -127,3 +127,6 @@ cython_debug/
 
 # VS Code
 .vscode/
+
+user_data/
+uv.lock

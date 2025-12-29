@@ -12,7 +12,6 @@ class ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = 1.0
     top_p: Optional[float] = 1.0
     
-    # Custom extensions for our backend
     new_chat: Optional[bool] = False
 
 class PromptRequest(BaseModel):
@@ -27,7 +26,7 @@ class PromptRequest(BaseModel):
     def validate_prompt_length(cls, v):
         if not v.strip():
             raise ValueError("Prompt cannot be empty")
-        if len(v) > 32000: # Increased limit for newer models
+        if len(v) > 32000:
             raise ValueError("Prompt exceeds maximum length")
         return v.strip()
 

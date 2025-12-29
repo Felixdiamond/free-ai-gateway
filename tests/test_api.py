@@ -11,11 +11,12 @@ def test_read_models():
     assert len(data["data"]) >= 3
     
     model_ids = [model["id"] for model in data["data"]]
-    assert "chatgpt-free" in model_ids
-    assert "gemini-free" in model_ids
-    assert "grok-free" in model_ids
+    assert "gpt" in model_ids
+    assert "gemini" in model_ids
+    assert "grok" in model_ids
 
 def test_health_check():
-    # Since we don't have a dedicated health endpoint, we can use docs or models
-    response = client.get("/docs")
+    response = client.get("/health")
     assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"

@@ -6,13 +6,13 @@ Why pay for AI APIs when you can self-host free access?
 
 This project provides a unified RESTful API interface to interact with multiple AI providers (ChatGPT, Gemini, Grok) through browser automation. It enables programmatic access without requiring API keys or paid subscriptions.
 
-Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-generation async browser automation.
+Powered by [zendriver](https://github.com/cdpdriver/zendriver).
 
 ## Features
 
 -   **Multiple Providers**: Support for ChatGPT, Google Gemini, and Grok.
 -   **Unified API**: OpenAI-compatible `chat/completions` endpoint.
--   **Browser Automation**: Uses `nodriver` for stealthy and efficient automation.
+-   **Browser Automation**: Uses `zendriver` for stealthy and efficient automation.
 -   **Docker Ready**: Easy deployment with Docker Compose.
 
 ## Installation
@@ -25,6 +25,10 @@ Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-g
 
 2.  **Install dependencies:**
     Using `uv` (recommended):
+    ```bash
+    uv sync
+    ```
+    or
     ```bash
     uv pip install -r requirements.txt
     ```
@@ -39,12 +43,17 @@ Powered by [nodriver](https://github.com/ultrafunkamsterdam/nodriver) for next-g
 
 1.  **Build and run with Docker Compose:**
     ```bash
-    docker-compose up -d --build
+    docker compose up -d --build
     ```
 
 2.  The API will be available at `http://localhost:8000`.
 
-3.  **Configuration:**
+3.  **Notes:**
+    - This image uses Xvfb (`DISPLAY=:99`) to provide a virtual display for Chromium.
+    - Shared memory is increased (`shm_size: 2gb`) to keep Chromium stable.
+    - Currently only works with `HEADLESS=False`
+
+4.  **Configuration:**
     Ensure you have a `.env` file created (copy from `.env.example`) before running the container.
 
 ## Configuration
@@ -75,7 +84,7 @@ Fully compatible with OpenAI's chat completion format.
 
 ```json
 {
-    "model": "gpt-5-mini",
+    "model": "gpt",
     "messages": [
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Explain quantum computing"}
@@ -146,7 +155,7 @@ curl -X POST http://localhost:8000/v1/providers/chatgpt/reset
 The project is structured as follows:
 
 -   `app/main.py`: FastAPI application entry point.
--   `app/core/browser.py`: Manages the `nodriver` browser instance.
+-   `app/core/browser.py`: Manages the `zendriver` browser instance.
 -   `app/providers/`: Contains provider-specific logic (ChatGPT, Gemini, Grok).
 -   `app/models.py`: Pydantic models for API requests and responses.
 
