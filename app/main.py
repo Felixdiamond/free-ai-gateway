@@ -1,21 +1,47 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.models import PromptRequest, ChatCompletionRequest, APIResponse, Choice, Message, Usage
 from app.core.browser import BrowserManager
+from app.core.tab_manager import TabManager
 from app.providers.chatgpt import ChatGPTProvider
 from app.providers.gemini import GeminiProvider
 from app.providers.grok import GrokProvider
 import uuid
 import time
 import logging
-import asyncio
 import math
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Free AI Gateway")
+providers = {
+    "chatgpt": ChatGPTProvider(),
+    "gemini": GeminiProvider(),
+    "grok": GrokProvider(),
+}
+
+tab_manager = TabManager()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle."""
+    await BrowserManager.get_browser()
+    
+    for name, provider in providers.items():
+        tab_manager.register_provider(name, provider.url)
+    
+    tab_manager.start_cleanup_task()
+    
+    logger.info("Application started with tab management enabled")
+    
+    yield
+    
+    await tab_manager.shutdown()
+    await BrowserManager.close()
+    logger.info("Application shutdown complete")
+
+app = FastAPI(title="Free AI Gateway", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,22 +50,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-providers = {
-    "chatgpt": ChatGPTProvider(),
-    "gemini": GeminiProvider(),
-    "grok": GrokProvider(),
-}
-
-@app.on_event("startup")
-async def startup_event():
-    await BrowserManager.get_browser()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await BrowserManager.close()
-
-
 
 @app.get("/v1/models")
 async def list_models():
@@ -54,11 +64,24 @@ async def list_models():
 
 @app.post("/v1/providers/{provider_name}/reset")
 async def reset_provider(provider_name: str):
+    """Reset a provider's tabs (close all tabs for this provider)."""
     if provider_name not in providers:
         raise HTTPException(status_code=400, detail=f"Provider {provider_name} not supported")
     
-    await providers[provider_name].reset()
-    return {"status": "success", "message": f"Provider {provider_name} reset successfully"}
+    await tab_manager.close_provider_tabs(provider_name)
+    return {"status": "success", "message": f"Provider {provider_name} tabs reset successfully"}
+
+@app.get("/v1/sessions/{session_id}/status")
+async def session_status(session_id: str):
+    """Get status of a session's tabs across all providers."""
+    status = tab_manager.get_session_status(session_id)
+    return {"session_id": session_id, "tabs": status}
+
+@app.delete("/v1/sessions/{session_id}")
+async def close_session(session_id: str):
+    """Close all tabs for a specific session."""
+    await tab_manager.close_session_tabs(session_id)
+    return {"status": "success", "message": f"Session {session_id} closed"}
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
@@ -93,12 +116,22 @@ async def chat_completions(request: ChatCompletionRequest):
     prompt_request = PromptRequest(
         prompt=last_user_message.content,
         system_prompt=system_prompt,
-        new_chat=False
+        new_chat=request.new_chat if hasattr(request, 'new_chat') else False
     )
     
+    managed_tab = None
     try:
-        async with provider.lock:
-            response = await provider.send_prompt(prompt_request)
+        managed_tab = await tab_manager.acquire_tab(provider_name, request.session_id)
+        
+        if prompt_request.new_chat:
+            await tab_manager.reload_tab(managed_tab)
+        
+        if managed_tab.message_count == 0:
+            await provider.prepare_tab(managed_tab)
+        
+        async with managed_tab.lock:
+            response = await provider.send_prompt(managed_tab, prompt_request)
+        
         prompt_tokens = math.ceil(len(prompt_request.prompt) / 4)
         completion_tokens = math.ceil(len(response) / 4)
 
@@ -122,7 +155,15 @@ async def chat_completions(request: ChatCompletionRequest):
     except Exception as e:
         logger.error(f"Error processing request: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if managed_tab:
+            await tab_manager.release_tab(managed_tab)
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Health check endpoint with tab stats."""
+    stats = tab_manager.get_stats()
+    return {
+        "status": "healthy",
+        "tab_stats": stats
+    }

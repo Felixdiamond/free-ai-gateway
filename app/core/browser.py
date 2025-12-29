@@ -3,7 +3,6 @@ import logging
 import zendriver as zd
 from app.core.config import settings
 
-# Monkeypatch for missing CDP event in zendriver
 try:
     from zendriver.cdp import util as cdp_util
     if "DOM.affectedByStartingStylesFlagUpdated" not in cdp_util._event_parsers:

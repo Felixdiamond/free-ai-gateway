@@ -13,6 +13,8 @@ Powered by [zendriver](https://github.com/cdpdriver/zendriver).
 -   **Multiple Providers**: Support for ChatGPT, Google Gemini, and Grok.
 -   **Unified API**: OpenAI-compatible `chat/completions` endpoint.
 -   **Browser Automation**: Uses `zendriver` for stealthy and efficient automation.
+-   **Concurrent Requests**: Smart tab management with per-tab locks for true parallelism.
+-   **Session Persistence**: Use session IDs to maintain conversation context across requests.
 -   **Docker Ready**: Easy deployment with Docker Compose.
 
 ## Installation
@@ -62,14 +64,31 @@ Powered by [zendriver](https://github.com/cdpdriver/zendriver).
     ```bash
     cp .env.example .env
     ```
-2.  Edit `.env` to configure your settings (e.g., browser path, headless mode).
+2.  Edit `.env` to configure your settings.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HEADLESS` | `False` | Run browser in headless mode |
+| `BROWSER_PATH` | auto | Path to Chromium binary |
+| `CHATGPT_URL` | `https://chatgpt.com` | ChatGPT URL |
+| `GEMINI_URL` | `https://gemini.google.com/app` | Gemini URL |
+| `GROK_URL` | `https://grok.com` | Grok URL |
+| `TIMEOUT_INPUT` | `10` | Wait time for input fields (seconds) |
+| `TIMEOUT_BUTTON` | `5` | Wait time for buttons (seconds) |
+| `TIMEOUT_RESPONSE` | `120` | Max wait for AI response (seconds) |
+| `TIMEOUT_STABLE_CONTENT` | `30` | Wait for response to stabilize |
+| `TAB_INACTIVE_MINUTES` | `10` | Close tabs inactive for this duration |
+| `TAB_POOL_SIZE` | `3` | Max anonymous tabs per provider |
+| `TAB_CLEANUP_INTERVAL` | `60` | Seconds between cleanup runs |
 
 ## Usage
 
 Start the server:
 
 ```bash
-uvicorn app.main:app`
+uvicorn app.main:app
 ```
 
 The API will be available at `http://localhost:8000`.
@@ -89,7 +108,8 @@ Fully compatible with OpenAI's chat completion format.
         {"role": "system", "content": "You are a helpful assistant."},
         {"role": "user", "content": "Explain quantum computing"}
     ],
-    "stream": false
+    "session_id": "a1b2c3d4e5f6",
+    "new_chat": false
 }
 ```
 
@@ -105,7 +125,8 @@ The API uses keyword matching to route requests to the correct provider. You can
 
 -   `model` (required): The ID of the model to use.
 -   `messages` (required): A list of messages comprising the conversation so far.
--   `new_chat` (optional, custom): Set to `true` to force a fresh browser session.
+-   `session_id` (optional): Hex string (8-32 chars) to persist conversation across requests. Same session_id = same browser tab = continued conversation.
+-   `new_chat` (optional): Set to `true` to force a fresh conversation (reloads the tab).
 
 **Response:**
 
@@ -139,15 +160,72 @@ List available models.
 
 ### POST /v1/providers/{provider_name}/reset
 
-Reset a specific provider's browser session if it gets stuck.
+Reset all tabs for a specific provider.
 
 ```bash
 curl -X POST http://localhost:8000/v1/providers/chatgpt/reset
 ```
 
+### GET /v1/sessions/{session_id}/status
+
+Check the status of a session's tabs across all providers.
+
+```bash
+curl http://localhost:8000/v1/sessions/a1b2c3d4e5f6/status
+```
+
+### DELETE /v1/sessions/{session_id}
+
+Close all tabs for a specific session.
+
+```bash
+curl -X DELETE http://localhost:8000/v1/sessions/a1b2c3d4e5f6
+```
+
+### GET /health
+
+Health check with tab statistics.
+
+```bash
+curl http://localhost:8000/health
+```
+
+## Session Management
+
+The gateway supports **session-based tab persistence** for multi-user scenarios:
+
+### How It Works
+
+1. **Anonymous Requests**: Without a `session_id`, requests use a shared pool of tabs (first-come-first-served).
+
+2. **Session Requests**: With a `session_id`, you get a dedicated tab that persists your conversation:
+   ```bash
+   # First message - creates a new tab
+   curl -X POST http://localhost:8000/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{"model": "gpt", "messages": [{"role": "user", "content": "My name is Alice"}], "session_id": "abc123def456"}'
+   
+   # Follow-up - same tab, AI remembers context
+   curl -X POST http://localhost:8000/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{"model": "gpt", "messages": [{"role": "user", "content": "What is my name?"}], "session_id": "abc123def456"}'
+   ```
+
+3. **Concurrent Users**: Multiple users with different session IDs can use the gateway simultaneously - each gets their own tab with per-tab locking.
+
+4. **Cleanup**: Inactive session tabs are automatically closed after `TAB_INACTIVE_MINUTES`.
+
+### Session ID Format
+
+- Must be a **hexadecimal string** (0-9, a-f)
+- Must be **8-32 characters** long
+- Examples: `a1b2c3d4`, `deadbeef12345678`, `abc123def456789012345678`
+
 ## Troubleshooting
 
--   **Browser Issues**: If the browser gets stuck or behaves unexpectedly, use the `/reset` endpoint or restart the server.
+-   **Browser Issues**: If the browser gets stuck or behaves unexpectedly, use the `/v1/providers/{name}/reset` endpoint or restart the server.
+-   **Slow Responses**: Increase timeout values in `.env` for slower networks.
+-   **Stale Responses**: The gateway tracks message counts to ensure fresh responses. If issues persist, use `new_chat: true`.
 
 ## Architecture
 
@@ -155,6 +233,8 @@ The project is structured as follows:
 
 -   `app/main.py`: FastAPI application entry point.
 -   `app/core/browser.py`: Manages the `zendriver` browser instance.
+-   `app/core/tab_manager.py`: Smart tab management with session support and pooling.
+-   `app/core/config.py`: Configuration via environment variables.
 -   `app/providers/`: Contains provider-specific logic (ChatGPT, Gemini, Grok).
 -   `app/models.py`: Pydantic models for API requests and responses.
 

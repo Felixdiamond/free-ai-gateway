@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Literal, Union
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Literal
+import re
 
 class ChatMessage(BaseModel):
     role: str
@@ -13,6 +14,17 @@ class ChatCompletionRequest(BaseModel):
     top_p: Optional[float] = 1.0
     
     new_chat: Optional[bool] = False
+    session_id: Optional[str] = None
+    
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v):
+        if v is None:
+            return None
+        v = v.strip().lower()
+        if not re.match(r'^[a-f0-9]{8,32}$', v):
+            raise ValueError("session_id must be a hexadecimal string between 8-32 characters")
+        return v
 
 class PromptRequest(BaseModel):
     prompt: str
@@ -22,7 +34,8 @@ class PromptRequest(BaseModel):
     new_chat: bool = Field(default=False, description="Force start a new chat")
     provider: Literal["chatgpt", "gemini", "grok"] = Field(default="chatgpt", description="AI Provider to use")
 
-    @validator("prompt")
+    @field_validator("prompt")
+    @classmethod
     def validate_prompt_length(cls, v):
         if not v.strip():
             raise ValueError("Prompt cannot be empty")
